@@ -1,0 +1,97 @@
+version: 2
+
+models:
+  - name: dim_customers
+    description: >
+      Customer dimension table. Combines customer attributes with aggregated
+      order and payment metrics. One row per customer.
+    columns:
+      - name: customer_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: full_name
+        description: Concatenated first and last name
+        tests:
+          - not_null
+      - name: total_orders
+        description: Lifetime count of orders placed by this customer
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: lifetime_spend_dollars
+        description: Total amount spent across all orders, in dollars
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: customer_tier
+        description: "Derived tier: inactive, new, active, or loyal"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["inactive", "new", "active", "loyal"]
+
+  - name: fct_orders
+    description: >
+      Orders fact table. Each row is a single order with payment totals and
+      customer context denormalized for query convenience.
+    columns:
+      - name: order_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Foreign key to dim_customers
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+      - name: order_total_dollars
+        description: Total payment amount for this order, in dollars
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: ordered_at
+        description: Date the order was placed
+        tests:
+          - not_null
+      - name: order_status
+        description: Current status of the order
+        tests:
+          - not_null
+
+  - name: metrics_daily
+    description: >
+      Daily business metrics rollup. One row per day with order volume,
+      revenue, and derived rates. Used for dashboards and trend analysis.
+    columns:
+      - name: date_day
+        description: Calendar date (primary key)
+        tests:
+          - unique
+          - not_null
+      - name: total_orders
+        description: Number of orders placed on this day
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: total_revenue_dollars
+        description: Total revenue for the day in dollars
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: return_rate_pct
+        description: Percentage of orders that were returned
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100

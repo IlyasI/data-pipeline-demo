@@ -1,0 +1,144 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Raw data loaded by the Python extraction pipeline.
+      Tables are append-only with a _loaded_at timestamp for deduplication.
+    schema: raw
+    tables:
+      - name: orders
+        description: Raw orders from the e-commerce platform
+        columns:
+          - name: id
+            description: Primary key
+            tests:
+              - not_null
+              - unique
+          - name: user_id
+            description: Foreign key to customers
+            tests:
+              - not_null
+          - name: order_date
+            description: Date the order was placed
+            tests:
+              - not_null
+          - name: status
+            description: "Order status: placed, shipped, completed, return_pending, returned"
+            tests:
+              - accepted_values:
+                  values: ["placed", "shipped", "completed", "return_pending", "returned"]
+
+      - name: customers
+        description: Raw customer records
+        columns:
+          - name: id
+            description: Primary key
+            tests:
+              - not_null
+              - unique
+          - name: first_name
+            description: Customer first name
+            tests:
+              - not_null
+          - name: last_name
+            description: Customer last name
+            tests:
+              - not_null
+
+      - name: payments
+        description: Raw payment transactions
+        columns:
+          - name: id
+            description: Primary key
+            tests:
+              - not_null
+              - unique
+          - name: order_id
+            description: Foreign key to orders
+            tests:
+              - not_null
+              - relationships:
+                  to: source('raw', 'orders')
+                  field: id
+          - name: payment_method
+            description: "Payment method used: credit_card, coupon, bank_transfer, gift_card"
+            tests:
+              - accepted_values:
+                  values: ["credit_card", "coupon", "bank_transfer", "gift_card"]
+          - name: amount
+            description: Payment amount in cents
+            tests:
+              - not_null
+
+models:
+  - name: stg_orders
+    description: >
+      Cleaned and deduplicated orders. Types are cast explicitly, columns are
+      renamed to snake_case, and test/invalid records are filtered out.
+    columns:
+      - name: order_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Foreign key to stg_customers
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: order_status
+        description: Current status of the order
+        tests:
+          - not_null
+      - name: ordered_at
+        description: Date the order was placed
+        tests:
+          - not_null
+
+  - name: stg_customers
+    description: >
+      Cleaned and deduplicated customers. String fields are trimmed,
+      types are cast explicitly.
+    columns:
+      - name: customer_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: first_name
+        description: Customer first name, trimmed
+        tests:
+          - not_null
+      - name: last_name
+        description: Customer last name, trimmed
+        tests:
+          - not_null
+
+  - name: stg_payments
+    description: >
+      Cleaned and deduplicated payments. Amount is converted from cents to
+      dollars. Failed payments are filtered out.
+    columns:
+      - name: payment_id
+        description: Primary key
+        tests:
+          - unique
+          - not_null
+      - name: order_id
+        description: Foreign key to stg_orders
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_orders')
+              field: order_id
+      - name: payment_method
+        description: Payment method used
+        tests:
+          - not_null
+      - name: amount_dollars
+        description: Payment amount in dollars (converted from cents)
+        tests:
+          - not_null
